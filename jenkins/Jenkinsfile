@@ -17,10 +17,21 @@ pipeline {
             }
         }
 
+        stage('Get Git Commit ID') {
+            steps {
+                script {
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+        }
+
         stage('Build Backend Image') {
             steps {
                 sh '''
-                docker build -t $DOCKERHUB_USERNAME/$BACKEND_IMAGE:latest ./backend
+                docker build -t $DOCKERHUB_USERNAME/$BACKEND_IMAGE:$GIT_COMMIT_SHORT ./backend
                 '''
             }
         }
@@ -28,7 +39,7 @@ pipeline {
         stage('Build Frontend Image') {
             steps {
                 sh '''
-                docker build -t $DOCKERHUB_USERNAME/$FRONTEND_IMAGE:latest ./frontend
+                docker build -t $DOCKERHUB_USERNAME/$FRONTEND_IMAGE:$GIT_COMMIT_SHORT ./frontend
                 '''
             }
         }
@@ -50,7 +61,7 @@ pipeline {
         stage('Push Backend Image') {
             steps {
                 sh '''
-                docker push $DOCKERHUB_USERNAME/$BACKEND_IMAGE:latest
+                docker push $DOCKERHUB_USERNAME/$BACKEND_IMAGE:$GIT_COMMIT_SHORT
                 '''
             }
         }
@@ -58,7 +69,34 @@ pipeline {
         stage('Push Frontend Image') {
             steps {
                 sh '''
-                docker push $DOCKERHUB_USERNAME/$FRONTEND_IMAGE:latest
+                docker push $DOCKERHUB_USERNAME/$FRONTEND_IMAGE:$GIT_COMMIT_SHORT
+                '''
+            }
+        }
+
+        stage('Update Helm Values') {
+
+            steps {
+
+                sh '''
+                sed -i "s|image:.*backend.*|image: devipriyadp1/aldi-lidl-backend:${GIT_COMMIT_SHORT}|g" aldi-lidl/values.yaml
+
+                sed -i "s|image:.*frontend.*|image: devipriyadp1/aldi-lidl-frontend:${GIT_COMMIT_SHORT}|g" aldi-lidl/values.yaml
+                '''
+            }
+
+        }
+
+        stage('Commit Helm Changes') {
+
+            steps {
+                sh '''
+                git config user.email "jenkins@ci.com"
+                git config user.name "jenkins"
+
+                git add .
+                git commit -m "auto update image tags: ${GIT_COMMIT_SHORT}" || true
+                git push
                 '''
             }
         }
@@ -66,11 +104,11 @@ pipeline {
 
     post {
         success {
-            echo '✅ Pipeline completed successfully!'
+            echo "✅ Pipeline successful - GitOps updated"
         }
 
         failure {
-            echo '❌ Pipeline failed. Check logs.'
+            echo "❌ Pipeline failed"
         }
     }
 }
