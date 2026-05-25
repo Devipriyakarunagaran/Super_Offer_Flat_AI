@@ -1,0 +1,53 @@
+pipeline {
+
+    agent any
+
+    environment {
+        DOCKERHUB_USERNAME = "devipriyadp1"
+        BACKEND_IMAGE = "aldi-lidl-backend"
+        FRONTEND_IMAGE = "aldi-lidl-frontend"
+    }
+
+    stages {
+
+        stage('Clone Repository') {
+            steps {
+                git branch: 'main',
+                url: 'https://github.com/Devipriyakarunagaran/Super_Offer_Flat_AI.git'
+            }
+        }
+
+        stage('Build Backend Image') {
+            steps {
+                sh '''
+                docker build -t $devipriyadp1/$BACKEND_IMAGE:latest ./backend
+                '''
+            }
+        }
+
+        stage('Build Frontend Image') {
+            steps {
+                sh '''
+                docker build -t $devipriyadp1/$FRONTEND_IMAGE:latest ./frontend
+                '''
+            }
+        }
+
+        stage('Push Backend Image') {
+            steps {
+                sh '''
+                docker push $devipriyadp1/$BACKEND_IMAGE:latest
+                '''
+            }
+        }
+
+        stage('Push Frontend Image') {
+            steps {
+                sh '''
+                docker push $devipriyadp1/$FRONTEND_IMAGE:latest
+                '''
+            }
+        }
+
+    }
+}
