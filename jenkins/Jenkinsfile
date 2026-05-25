@@ -10,6 +10,7 @@ pipeline {
 
     stages {
 
+        // ---------------- CLONE CODE ----------------
         stage('Clone Repository') {
             steps {
                 git branch: 'main',
@@ -17,7 +18,8 @@ pipeline {
             }
         }
 
-        stage('Get Git Commit ID') {
+        // ---------------- GET COMMIT ID ----------------
+        stage('Get Commit ID') {
             steps {
                 script {
                     env.GIT_COMMIT_SHORT = sh(
@@ -28,6 +30,7 @@ pipeline {
             }
         }
 
+        // ---------------- BUILD BACKEND ----------------
         stage('Build Backend Image') {
             steps {
                 sh '''
@@ -36,6 +39,7 @@ pipeline {
             }
         }
 
+        // ---------------- BUILD FRONTEND ----------------
         stage('Build Frontend Image') {
             steps {
                 sh '''
@@ -44,6 +48,7 @@ pipeline {
             }
         }
 
+        // ---------------- DOCKER LOGIN ----------------
         stage('DockerHub Login') {
             steps {
                 withCredentials([usernamePassword(
@@ -58,6 +63,7 @@ pipeline {
             }
         }
 
+        // ---------------- PUSH BACKEND ----------------
         stage('Push Backend Image') {
             steps {
                 sh '''
@@ -66,6 +72,7 @@ pipeline {
             }
         }
 
+        // ---------------- PUSH FRONTEND ----------------
         stage('Push Frontend Image') {
             steps {
                 sh '''
@@ -74,28 +81,35 @@ pipeline {
             }
         }
 
-        stage('Update Helm Values') {
-
+        // ---------------- RUN SCRAPER (DATA INGESTION) ----------------
+        stage('Run Scraper') {
             steps {
-
                 sh '''
-                sed -i "s|image:.*backend.*|image: devipriyadp1/aldi-lidl-backend:${GIT_COMMIT_SHORT}|g" aldi-lidl/values.yaml
-
-                sed -i "s|image:.*frontend.*|image: devipriyadp1/aldi-lidl-frontend:${GIT_COMMIT_SHORT}|g" aldi-lidl/values.yaml
+                echo "Running Aldi + Lidl scraper..."
+                python3 backend/scraper/run_scraper.py
                 '''
             }
-
         }
 
-        stage('Commit Helm Changes') {
+        // ---------------- UPDATE HELM VALUES (GITOPS) ----------------
+        stage('Update Helm Values (GitOps)') {
+            steps {
+                sh '''
+                sed -i "s|aldi-lidl-backend:.*|aldi-lidl-backend:$GIT_COMMIT_SHORT|g" aldi-lidl/values.yaml
+                sed -i "s|aldi-lidl-frontend:.*|aldi-lidl-frontend:$GIT_COMMIT_SHORT|g" aldi-lidl/values.yaml
+                '''
+            }
+        }
 
+        // ---------------- PUSH HELM CHANGES ----------------
+        stage('Commit GitOps Changes') {
             steps {
                 sh '''
                 git config user.email "jenkins@ci.com"
                 git config user.name "jenkins"
 
                 git add .
-                git commit -m "auto update image tags: ${GIT_COMMIT_SHORT}" || true
+                git commit -m "auto update images + scraper run: $GIT_COMMIT_SHORT" || true
                 git push
                 '''
             }
@@ -104,11 +118,11 @@ pipeline {
 
     post {
         success {
-            echo "✅ Pipeline successful - GitOps updated"
+            echo "✅ Pipeline completed successfully - GitOps updated"
         }
 
         failure {
-            echo "❌ Pipeline failed"
+            echo "❌ Pipeline failed - check logs"
         }
     }
 }
